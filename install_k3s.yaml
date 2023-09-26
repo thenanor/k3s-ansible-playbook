@@ -84,3 +84,21 @@
     tasks:
       - name: Installing K3s agents
         shell: curl -sfL https://get.k3s.io | K3S_URL=https://{{ hostvars['K3s_MASTER_DETAILS']['masterip'] }}:6443 K3S_TOKEN={{ hostvars['K3s_MASTER_DETAILS']['nodetoken'] }} sh -
+
+  - name: Install Helm on all nodes
+    hosts: all:!K3s_MASTER_DETAILS
+    tasks:
+      - name: Install Helm from a script
+        shell: |
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          ./get_helm.sh
+        become: true
+        become_method: sudo
+
+      - name: Leverage the KUBECONFIG environment variable
+        shell: |
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          helm ls --all-namespaces
+        become: true
+        become_method: sudo
