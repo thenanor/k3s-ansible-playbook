@@ -5,13 +5,14 @@ Automating K3s cluster setup with Ansible
 ## Pre-requisites
 
 - All nodes in the cluster should have Linux based OS installed
+- All nodes in the cluster should have static IPs assigned to them
 - SSH should be enabled on all nodes in the cluster
 - All nodes in the cluster should have different hostnames but should use the same username and password
 - The local mahine that will SSH to the cluster should have Ansible installed
 
 ## Configuration on your local machine
 
-- Ensure the hostnames and the IPs of the cluster nodes are added to the **/etc/hosts** file.
+- Ensure the hostnames and the static IPs of the cluster nodes are added to the **/etc/hosts** file.
 
 ```shell
 sudo nano /etc/hosts
