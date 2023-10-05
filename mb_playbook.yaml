@@ -109,18 +109,18 @@
   - name: Install the Frontend Helm Chart from public ECR
     hosts: all:!K3s_MASTER_DETAILS
     vars:
-      helm_chart_registry: public.ecr.aws
-      helm_chart_registry_alias: registry-alias
-      helm_chart_repository: mb-frontend
+      ecr_registry: public.ecr.aws
+      ecr_registry_alias: mb-frontend
+      ecr_helm_repository: chart
       helm_chart_version: {{ mb_frontend_version }}
       kubeconfig_path: /etc/rancher/k3s/k3s.yaml
     tasks:
       - name: Login to Helm registry
-        shell: aws ecr get-login-password --region eu-west-1 | helm registry login --username AWS --password-stdin {{ helm_chart_registry }}
+        shell: aws ecr get-login-password --region eu-west-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
 
       - name: Install Frontend Helm chart from ECR
         kubernetes.core.helm:
-          chart_ref: "oci://{{ helm_chart_registry }}/{{ helm_chart_registry_alias }}/{{ helm_chart_repository }}"
+          chart_ref: "oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }}"
           chart_version: "{{ helm_chart_version }}"
           atomic: true
           wait: true
@@ -145,18 +145,18 @@
   - name: Install the Backend Helm Chart from public ECR
     hosts: all:!K3s_MASTER_DETAILS
     vars:
-      helm_chart_registry: public.ecr.aws
-      helm_chart_registry_alias: registry-alias
-      helm_chart_repository: mb-backend
+      ecr_registry: public.ecr.aws
+      ecr_registry_alias: mb-backend
+      ecr_helm_repository: chart
       helm_chart_version: {{ mb_backend_version }}
       kubeconfig_path: /etc/rancher/k3s/k3s.yaml
     tasks:
       - name: Login to Helm registry
-        shell: aws ecr get-login-password --region eu-west-1 | helm registry login --username AWS --password-stdin {{ helm_chart_registry }}
+        shell: aws ecr get-login-password --region eu-west-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
 
       - name: Install Backend Helm umbrella chart from ECR
         kubernetes.core.helm:
-          chart_ref: "oci://{{ helm_chart_registry }}/{{ helm_chart_registry_alias }}/{{ helm_chart_repository }}"
+          chart_ref: "oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }}"
           chart_version: "{{ helm_chart_version }}"
           atomic: true
           wait: true
