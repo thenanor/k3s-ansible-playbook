@@ -1,6 +1,6 @@
-# Kubernetes-Cluster-Setup-Automation
+# K3s-Cluster-Setup-Automation and Installing Machine Builder Helm Charts
 
-Automating K3s cluster setup with Ansible
+Automating K3s cluster setup and installing Machine Builder Helm charts with Ansible
 
 ## Pre-requisites
 
@@ -74,24 +74,22 @@ ansible -i ./hosts -m ping all
 
 - Find the path of the configuration file in the cluster's system boot.  
    it's usually either _/boot/cmdline.txt_ or _/boot/firmware/cmdline.txt_
-- Change the path used in the **install_k3s.yaml** file with the correct configuration path.
 
-- Some tasks in the Ansible playbook require the **sudo** password to run:  
-  Here are some alternatives:
+- Change the path used in the **mb_playbook.yaml** file with the correct configuration path.
 
-### Alternative 1 - Ask Sudo password in Ansible:
+- Find the Frontend helm chart version number that you want to use
 
-```shell
-  ansible-playbook -i ./hosts install_k3s.yaml --ask-become-pass
-```
+- Find the Backend helm umbrella chart version number that you want to use
 
-### Alternative 2 - Set Ansible Sudo Variable:
+- Get the **sudo** password of the cluster as some Ansible tasks require it to run:
+
+- Run the Ansible playbook:
 
 ```shell
-  ansible-playbook -i ./hosts install_k3s.yaml -e "ansible_become_password=TypeTheSudoPasswordHere"
+  ansible-playbook -i ./hosts mb_playbook.yaml -e "mb_frontend_version=v1.0.0 mb_backend_version=v1.2.0" --ask-become-pass
 ```
 
-### Alternative 3 - Store the Sudo Password in Ansible Vault:
+## Alternative for the Sudo passowrd to store it in an Ansible Vault:
 
 1. Create a file with Ansible Vault (let's say its called password.yml) which will hold the password:
 
@@ -102,7 +100,7 @@ ansible-vault create password.yml
 You need to provide a password for this file - this is not the sudo password, this is just an encryption password.  
 Once you provide an encryption password, it will open the file where you can enter any sensitive data, add this line:
 
-```
+```shell
 ansible_become_password: TypeTheSudoPasswordHere
 ```
 
@@ -110,19 +108,19 @@ Ansible vault will encrypt this data for you, which will be safe to include it i
 
 2. Create a file (let's say its called vault.txt) which will hold your encryption password:
 
-```
+```shell
 echo "the_encryption_password_you_used_earlier" > vault.txt
 ```
 
 3. Ensure permissions on vault.txt are such that no one else can access it and do not add this file to a source control.
 
-```
+```shell
 chmod 600 vault.txt
 echo "vault.txt" >> .gitignore
 ```
 
 4. Run the playbook:
 
-```
-ansible-playbook -i ./hosts install_k3s.yaml -e '@password.yml' --vault-password-file=vault.txt
+```shell
+ansible-playbook -i ./hosts mb_playbook.yaml -e "mb_frontend_version=v1.0.0 mb_backend_version=v1.2.0" -e '@password.yml' --vault-password-file=vault.txt
 ```
