@@ -109,36 +109,36 @@
         become: true
         become_method: sudo
 
-  - name: Install Grafana Helm Chart for testing
-    hosts: all:!K3s_MASTER_DETAILS
-    gather_facts: no
-    vars:
-      kubeconfig_path: /etc/rancher/k3s/k3s.yaml
-    tasks:
-      - name: Deploy latest version of Grafana chart inside testing namespace
-        kubernetes.core.helm:
-          chart_ref: oci://registry-1.docker.io/bitnamicharts/grafana
-          chart_version: "9.2.3"
-          release_name: test-graphana
-          release_namespace: testing
-          create_namespace: true
-          atomic: true
-          wait: true
-          kubeconfig: "{{ kubeconfig_path }}"
-        become: true
-        become_method: sudo
+  # - name: Install Grafana Helm Chart for testing
+  #   hosts: all:!K3s_MASTER_DETAILS
+  #   gather_facts: no
+  #   vars:
+  #     kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+  #   tasks:
+  #     - name: Deploy latest version of Grafana chart inside testing namespace
+  #       kubernetes.core.helm:
+  #         chart_ref: oci://registry-1.docker.io/bitnamicharts/grafana
+  #         chart_version: "9.2.3"
+  #         release_name: test-graphana
+  #         release_namespace: testing
+  #         create_namespace: true
+  #         atomic: true
+  #         wait: true
+  #         kubeconfig: "{{ kubeconfig_path }}"
+  #       become: true
+  #       become_method: sudo
 
-      - name: Gather information about the installed Grafana helm chart
-        kubernetes.core.helm_info:
-            release_name: test-graphana
-            release_namespace: testing
-            kubeconfig: "{{ kubeconfig_path }}"
-        become: true
-        become_method: sudo
-        register: graphana_info
+  #     - name: Gather information about the installed Grafana helm chart
+  #       kubernetes.core.helm_info:
+  #           release_name: test-graphana
+  #           release_namespace: testing
+  #           kubeconfig: "{{ kubeconfig_path }}"
+  #       become: true
+  #       become_method: sudo
+  #       register: graphana_info
 
-      - name: Debug
-        debug: var=graphana_info
+  #     - name: Debug
+  #       debug: var=graphana_info
 
   # - name: Install some Test Helm Chart from public ECR
   #   # hosts: all:!K3s_MASTER_DETAILS
@@ -180,86 +180,130 @@
   #     - name: Debug
   #       debug: var=ecr_info
 
-  - name: Install the Frontend Helm Chart from public ECR 
+  - name: Install the frontend Helm Chart from private repository
     hosts: all:!K3s_MASTER_DETAILS
-    gather_facts: no
     vars:
-      ecr_registry: public.ecr.aws
-      ecr_registry_alias: mb-frontend
-      ecr_helm_repository: chart
-      helm_chart_version: "{{ mb_frontend_version }}"
-      kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+      helm_chart_registry: 689943567978.dkr.ecr.eu-west-1.amazonaws.com
+      helm_chart_repository: fe-test-chart
+      helm_chart_tag: 0.3.0-24-g37171e5
     tasks:
+      # - name: Configure AWS profile - you don't need this if you have aws credentials already available in .aws/credentials
+      #   shell: |
+      #     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+      #     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY 
+      #     aws configure set aws_session_token $AWS_SESSION_TOKEN 
+      #     aws configure set region eu-west-1
+
       - name: Login to Helm registry
-        shell: aws ecr get-login-password --region eu-west-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
+        shell: aws ecr get-login-password --region eu-west-1 | 
+              helm registry login --username AWS --password-stdin {{ helm_chart_registry }}
 
-      - name: Install Frontend Helm chart from ECR
-        kubernetes.core.helm:
-          chart_ref: "oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }}"
-          chart_version: "{{ helm_chart_version }}"
-          atomic: true
-          wait: true
-          kubeconfig: "{{ kubeconfig_path }}"
-          release_name: frontend
-          release_namespace: machine-builder
-          create_namespace: true
-          release_state: present
-          set_values:
-            - value: "image.tag={{ helm_chart_version }}"
-              value_type: string
+      - name: Install Frontend Helm chart from private ECR using helm commands
+        shell: |
+            helm upgrade frontend oci://{{ helm_chart_registry }}/{{ helm_chart_repository }} --version {{ helm_chart_tag }} \
+              --install --atomic --namespace machine-builder --create-namespace \
+              --set image.repository={{ helm_chart_registry }}/frontend \
+              --set image.tag={{ helm_chart_tag }} \
+              --set service.port=3000 \
+              --kubeconfig /etc/rancher/k3s/k3s.yaml \
+              --registry-config {{ ansible_env.HOME }}/.config/helm/registry/config.json
         become: true
         become_method: sudo
 
-      - name: Gather information about the installed frontend helm chart
-        kubernetes.core.helm_info:
-            release_name: frontend
-            release_namespace: machine-builder
-            kubeconfig: "{{ kubeconfig_path }}"
-        become: true
-        become_method: sudo
-        register: frontend_info
+      # - name: Install Frontend Helm chart from private ECR
+      #   kubernetes.core.helm:
+      #     chart_ref: "oci://{{ helm_chart_registry }}/{{ helm_chart_repository }}"
+      #     chart_version: "{{ helm_chart_tag }}"
+      #     atomic: true
+      #     wait: true
+      #     kubeconfig: /etc/rancher/k3s/k3s.yaml
+      #     release_name: frontend
+      #     release_namespace: machine-builder
+      #     create_namespace: true
+      #     release_state: present
+      #     release_values:
+      #       image.tag: "{{ helm_chart_tag }}"
+      #   become: true
+      #   become_method: sudo
 
-      - name: Debug
-        debug: var=frontend_info
+  # - name: Install the Frontend Helm Chart from public ECR 
+  #   hosts: all:!K3s_MASTER_DETAILS
+  #   gather_facts: no
+  #   vars:
+  #     ecr_registry: public.ecr.aws
+  #     ecr_registry_alias: mb-frontend
+  #     ecr_helm_repository: chart
+  #     helm_chart_version: "{{ mb_frontend_version }}"
+  #     kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+  #   tasks:
+  #     - name: Login to Helm registry
+  #       shell: aws ecr get-login-password --region eu-west-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
 
-  - name: Install the Backend Helm Chart from public ECR
-    hosts: all:!K3s_MASTER_DETAILS
-    gather_facts: no
-    vars:
-      ecr_registry: public.ecr.aws
-      ecr_registry_alias: mb-backend
-      ecr_helm_repository: chart
-      helm_chart_version: "{{ mb_backend_version }}"
-      kubeconfig_path: /etc/rancher/k3s/k3s.yaml
-    tasks:
-      - name: Login to Helm registry
-        shell: aws ecr get-login-password --region eu-west-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
+  #     - name: Install Frontend Helm chart from ECR
+  #       kubernetes.core.helm:
+  #         chart_ref: "oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }}"
+  #         chart_version: "{{ helm_chart_version }}"
+  #         atomic: true
+  #         wait: true
+  #         kubeconfig: "{{ kubeconfig_path }}"
+  #         release_name: frontend
+  #         release_namespace: machine-builder
+  #         create_namespace: true
+  #         release_state: present
+  #         release_values:
+  #           image.tag: "{{ helm_chart_version }}"
+  #       become: true
+  #       become_method: sudo
 
-      - name: Install Backend Helm umbrella chart from ECR
-        kubernetes.core.helm:
-          chart_ref: "oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }}"
-          chart_version: "{{ helm_chart_version }}"
-          atomic: true
-          wait: true
-          kubeconfig: "{{ kubeconfig_path }}"
-          release_name: backend
-          release_namespace: machine-builder
-          create_namespace: true
-          release_state: present
-          set_values:
-            - value: "assets-api.image.tag={{ helm_chart_version }}"
-              value_type: string
-        become: true
-        become_method: sudo
+  #     - name: Gather information about the installed frontend helm chart
+  #       kubernetes.core.helm_info:
+  #           release_name: frontend
+  #           release_namespace: machine-builder
+  #           kubeconfig: "{{ kubeconfig_path }}"
+  #       become: true
+  #       become_method: sudo
+  #       register: frontend_info
 
-      - name: Gather information about the installed backend helm umbrella chart
-        kubernetes.core.helm_info:
-            release_name: backend
-            release_namespace: machine-builder
-            kubeconfig: "{{ kubeconfig_path }}"
-        become: true
-        become_method: sudo
-        register: backend_info
+  #     - name: Debug
+  #       debug: var=frontend_info
 
-      - name: Debug
-        debug: var=backend_info
+  # - name: Install the Backend Helm Chart from public ECR
+  #   hosts: all:!K3s_MASTER_DETAILS
+  #   gather_facts: no
+  #   vars:
+  #     ecr_registry: public.ecr.aws
+  #     ecr_registry_alias: mb-backend
+  #     ecr_helm_repository: chart
+  #     helm_chart_version: "{{ mb_backend_version }}"
+  #     kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+  #   tasks:
+  #     - name: Login to Helm registry
+  #       shell: aws ecr get-login-password --region eu-west-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
+
+  #     - name: Install Backend Helm umbrella chart from ECR
+  #       kubernetes.core.helm:
+  #         chart_ref: "oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }}"
+  #         chart_version: "{{ helm_chart_version }}"
+  #         atomic: true
+  #         wait: true
+  #         kubeconfig: "{{ kubeconfig_path }}"
+  #         release_name: backend
+  #         release_namespace: machine-builder
+  #         create_namespace: true
+  #         release_state: present
+  #         release_values:
+  #           assets-api.image.tag: "{{ helm_chart_version }}"
+  #       become: true
+  #       become_method: sudo
+
+  #     - name: Gather information about the installed backend helm umbrella chart
+  #       kubernetes.core.helm_info:
+  #           release_name: backend
+  #           release_namespace: machine-builder
+  #           kubeconfig: "{{ kubeconfig_path }}"
+  #       become: true
+  #       become_method: sudo
+  #       register: backend_info
+
+  #     - name: Debug
+  #       debug: var=backend_info
