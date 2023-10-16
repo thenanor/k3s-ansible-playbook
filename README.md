@@ -8,7 +8,13 @@ Automating K3s cluster setup and installing Machine Builder Helm charts with Ans
 - All nodes in the cluster should have static IPs assigned to them
 - SSH should be enabled on all nodes in the cluster
 - All nodes in the cluster should have different hostnames but should use the same username and password
-- The local mahine that will SSH to the cluster should have Ansible installed
+- The local mahine that will SSH to the cluster should have Ansible and the AWS community collection installed.
+
+To install the AWS community collection just run:
+
+```shell
+ansible-galaxy collection install community.aws
+```
 
 ## Configuration on your local machine
 
