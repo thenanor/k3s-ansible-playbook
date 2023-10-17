@@ -95,9 +95,6 @@
           path: "/usr/local/bin/helm"
         register: is_helm_installed
 
-      - name: Debug
-        debug: var=is_helm_installed
-
       - name: Install Helm from a script
         shell: |
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
@@ -115,9 +112,6 @@
         stat:
           path: "/usr/local/bin/aws"
         register: is_aws_installed
-
-      - name: Debug
-        debug: var=is_aws_installed
 
       - name: Install dependencies
         ansible.builtin.package: name={{ item }} state=present
@@ -138,6 +132,7 @@
 
   - name: Ensure required modules are installed to assume AWS role
     hosts: masternode
+    gather_facts: no
     tasks:
       - name: Check if pip is already installed
         stat:
@@ -173,13 +168,6 @@
           aws configure set aws_access_key_id {{ ansible_user_access_key }} --profile ansible_user
           aws configure set aws_secret_access_key {{ ansible_user_secret_key }} --profile ansible_user
 
-      - name: Who am I
-        shell: |
-          aws sts get-caller-identity --profile ansible_user
-        register: who_am_i_before
-      - name: debug
-        debug: var=who_am_i_before
-
       - name: Assume the required AWS role
         community.aws.sts_assume_role:
           role_arn: "arn:aws:iam::689943567978:role/ansible_user_public_ecr_read_only"
@@ -192,14 +180,6 @@
           aws configure set aws_access_key_id {{ assumed_public_ecr_role.sts_creds.access_key }} --profile ansible_user
           aws configure set aws_secret_access_key {{ assumed_public_ecr_role.sts_creds.secret_key }} --profile ansible_user
           aws configure set aws_session_token {{ assumed_public_ecr_role.sts_creds.session_token }} --profile ansible_user
-
-      - name: who am I
-        shell: |
-          aws sts get-caller-identity --profile ansible_user
-        register: who_am_i_after
-
-      - name: debug
-        debug: var=who_am_i_after
 
   - name: Install the Frontend Helm Chart from public ECR
     hosts: masternode
@@ -266,3 +246,13 @@
 
       - name: Debug
         debug: var=frontend_gather_info
+
+  - name: Clear AWS configuration
+    hosts: masternode
+    gather_facts: yes
+    tasks:
+      - name: Remove credentials
+        shell: |
+          rm -rf {{ ansible_env.HOME }}/.aws/*
+        tags:
+        - always
