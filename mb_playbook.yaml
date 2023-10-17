@@ -1,142 +1,205 @@
 ---
-  # - name: Check cgroup configuration on all nodes
-  #   hosts: all
-  #   gather_facts: true
+  - name: Check cgroup configuration on all nodes
+    hosts: all
+    gather_facts: true
 
-  #   tasks:
-  #     - name: Check if cgroup config is existing or not
-  #       shell: grep -o "cgroup_memory=1 cgroup_enable=memory" /boot/firmware/cmdline.txt
-  #       register: out
-  #       failed_when: false
-  #       changed_when: false
+    tasks:
+      - name: Check if cgroup config is existing or not
+        shell: grep -o "cgroup_memory=1 cgroup_enable=memory" /boot/firmware/cmdline.txt
+        register: out
+        failed_when: false
+        changed_when: false
 
-  #     - name: Execute if not existing
-  #       shell: |
-  #               cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.backup.%date
-  #               sed -i 's/$/ cgroup_memory=1 cgroup_enable=memory/g' /boot/firmware/cmdline.txt
-  #               sleep 5 && shutdown -r now "Ansible Rebooting after cgroup configuration"
-  #       when: "'cgroup_memory=1 cgroup_enable=memory' not in out.stdout"
-  #       async: 0
-  #       poll: 0
-  #       ignore_unreachable: true
-  #       become: true
-  #       become_method: sudo
+      - name: Execute if not existing
+        shell: |
+                cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.backup.%date
+                sed -i 's/$/ cgroup_memory=1 cgroup_enable=memory/g' /boot/firmware/cmdline.txt
+                sleep 5 && shutdown -r now "Ansible Rebooting after cgroup configuration"
+        when: "'cgroup_memory=1 cgroup_enable=memory' not in out.stdout"
+        async: 0
+        poll: 0
+        ignore_unreachable: true
+        become: true
+        become_method: sudo
 
-  #     - name: Waiting for server to come back
-  #       wait_for_connection:
-  #         delay: 5
+      - name: Waiting for server to come back
+        wait_for_connection:
+          delay: 5
 
-  # - name: Master Node Configuration
-  #   hosts: masternode
-  #   gather_facts: no
+  - name: Master Node Configuration
+    hosts: masternode
+    gather_facts: no
 
-  #   tasks:
-  #     - name: Check if 10250 is Opened
-  #       wait_for:
-  #         port: 10250
-  #         delay: 5
-  #         timeout: 10
-  #         msg: "10250 is not open"
-  #       register: port_check
-  #       ignore_errors: yes
+    tasks:
+      - name: Check if 10250 is Opened
+        wait_for:
+          port: 10250
+          delay: 5
+          timeout: 10
+          msg: "10250 is not open"
+        register: port_check
+        ignore_errors: yes
 
-  #     - name: Open port 10250 in iptables
-  #       shell: iptables -A INPUT -p tcp --dport 10250 -j ACCEPT
-  #       when: port_check.failed == true
-  #       become: true
-  #       become_method: sudo
+      - name: Open port 10250 in iptables
+        shell: iptables -A INPUT -p tcp --dport 10250 -j ACCEPT
+        when: port_check.failed == true
+        become: true
+        become_method: sudo
 
-  #     - name: Print message if 10250 is Already Opened
-  #       debug:
-  #         msg: "10250 is already Opened"
-  #       when: port_check.failed == false
+      - name: Print message if 10250 is Already Opened
+        debug:
+          msg: "10250 is already Opened"
+        when: port_check.failed == false
 
-  #     - name: Install k3s in Master Node
-  #       shell: |
-  #               curl -sfL https://get.k3s.io | sh -
-  #               kubectl get nodes
-  #       become: true
-  #       become_method: sudo
+      - name: Install k3s in Master Node
+        shell: |
+                curl -sfL https://get.k3s.io | sh -
+                kubectl get nodes
+        become: true
+        become_method: sudo
 
-  # - name: Gather IP and Node Token from Master Node
-  #   hosts: masternode
-  #   gather_facts: no
+  - name: Gather IP and Node Token from Master Node
+    hosts: masternode
+    gather_facts: no
 
-  #   tasks:
-  #     - name: Get the IP of Master Node
-  #       shell: hostname -I | awk '{print$1}'
-  #       register: masterIP
+    tasks:
+      - name: Get the IP of Master Node
+        shell: hostname -I | awk '{print$1}'
+        register: masterIP
 
-  #     - name: Get the Node Token value from the Master
-  #       shell: cat /var/lib/rancher/k3s/server/node-token
-  #       become: true
-  #       become_method: sudo
-  #       register: nodeToken
+      - name: Get the Node Token value from the Master
+        shell: cat /var/lib/rancher/k3s/server/node-token
+        become: true
+        become_method: sudo
+        register: nodeToken
 
-  #     - name: Add to a dummy host
-  #       add_host:
-  #         name: "K3s_MASTER_DETAILS"
-  #         masterip: "{{ masterIP.stdout }}"
-  #         nodetoken: "{{ nodeToken.stdout }}"
+      - name: Add to a dummy host
+        add_host:
+          name: "K3s_MASTER_DETAILS"
+          masterip: "{{ masterIP.stdout }}"
+          nodetoken: "{{ nodeToken.stdout }}"
 
-  # - name: Install K3s in Worker nodes
-  #   hosts: workers
-  #   gather_facts: no
-  #   tasks:
-  #     - name: Installing K3s agents
-  #       shell: curl -sfL https://get.k3s.io | K3S_URL=https://{{ hostvars['K3s_MASTER_DETAILS']['masterip'] }}:6443 K3S_TOKEN={{ hostvars['K3s_MASTER_DETAILS']['nodetoken'] }} sh -
+  - name: Install K3s in Worker nodes
+    hosts: workers
+    gather_facts: no
+    tasks:
+      - name: Installing K3s agents
+        shell: curl -sfL https://get.k3s.io | K3S_URL=https://{{ hostvars['K3s_MASTER_DETAILS']['masterip'] }}:6443 K3S_TOKEN={{ hostvars['K3s_MASTER_DETAILS']['nodetoken'] }} sh -
 
-  # - name: Install Helm on Master Node
-  #   hosts: masternode
-  #   gather_facts: no
-  #   tasks:
-  #     - name: Install Helm from a script
-  #       shell: |
-  #         curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-  #         chmod 700 get_helm.sh
-  #         ./get_helm.sh --version v3.12.3
-  #       become: true
-  #       become_method: sudo
+  - name: Install Helm on Master Node
+    hosts: masternode
+    gather_facts: no
+    tasks:
+      - name: Check if Helm is already installed
+        stat:
+          path: "/usr/local/bin/helm"
+        register: is_helm_installed
 
-  # - name: Install AWS cli and other dependencies on Master Node
-  #   hosts: masternode
-  #   gather_facts: no
-  #   tasks:
-  #     - name: Install package dependencies
-  #       ansible.builtin.package: name={{ item }} state=present
-  #       with_items:
-  #         - awscli
-  #         - python3-pip
-  #       become: true
-  #       become_method: sudo
+      - name: Debug
+        debug: var=is_helm_installed
 
-  #     - name: Ensure boto and boto3 modules are installed
-  #       pip:
-  #         name: "{{ item }}"
-  #       with_items:
-  #         - boto3
-  #         - botocore
-  #       become: true
-  #       become_method: sudo
+      - name: Install Helm from a script
+        shell: |
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          ./get_helm.sh --version v3.12.3
+        when: not is_helm_installed.stat.exists
+        become: true
+        become_method: sudo
 
-  - name: Configure AWS
+  - name: Install and Configure AWS on Master Node
+    hosts: masternode
+    gather_facts: no
+    tasks:
+      - name: Check if AWS CLI is already installed
+        stat:
+          path: "/usr/local/bin/aws"
+        register: is_aws_installed
+
+      - name: Debug
+        debug: var=is_aws_installed
+
+      - name: Install dependencies
+        ansible.builtin.package: name={{ item }} state=present
+        with_items:
+          - unzip
+        when: not is_aws_installed.stat.exists
+        become: true
+        become_method: sudo
+
+      - name: Install AWS CLI from a script for ARM
+        shell: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          ./aws/install
+        when: not is_aws_installed.stat.exists
+        become: true
+        become_method: sudo
+
+  - name: Ensure required modules are installed to assume AWS role
     hosts: masternode
     tasks:
-      - name: Assume AWS role for ECR Public
+      - name: Check if pip is already installed
+        stat:
+          path: "/usr/lib/python3/dist-packages/pip"
+        register: is_pip_installed
+
+      - name: Install pip
+        ansible.builtin.package: name={{ item }} state=present
+        with_items:
+          - python3-pip
+        when: not is_pip_installed.stat.exists
+        become: true
+        become_method: sudo
+
+      - name: Ensure boto and boto3 modules are installed
+        pip:
+          name: "{{ item }}"
+        with_items:
+          - boto3
+        become: true
+        become_method: sudo
+
+  - name: Assume the AWS role and update the credentials
+    hosts: masternode
+    gather_facts: yes
+    tasks:
+      - name: Start with clean credentials
+        shell: |
+          rm -rf {{ ansible_env.HOME }}/.aws/*
+
+      - name: Configure Anisble User credentials which has no permissions
+        shell: |
+          aws configure set aws_access_key_id {{ ansible_user_access_key }} --profile ansible_user
+          aws configure set aws_secret_access_key {{ ansible_user_secret_key }} --profile ansible_user
+
+      - name: Who am I
+        shell: |
+          aws sts get-caller-identity --profile ansible_user
+        register: who_am_i_before
+      - name: debug
+        debug: var=who_am_i_before
+
+      - name: Assume the required AWS role
         community.aws.sts_assume_role:
           role_arn: "arn:aws:iam::689943567978:role/ansible_user_public_ecr_read_only"
           role_session_name: "PublicECR-Session"
+          profile: ansible_user
         register: assumed_public_ecr_role
 
-      - name: Configure AWS profile
+      - name: Update the AWS credentials with the assumed role
         shell: |
-          export AWS_ACCESS_KEY_ID="{{ assumed_public_ecr_role.sts_creds.access_key }}"
-          export AWS_SECRET_ACCESS_KEY="{{ assumed_public_ecr_role.sts_creds.secret_key }}"
-          export AWS_SESSION_TOKEN="{{ assumed_public_ecr_role.sts_creds.session_token }}"
+          aws configure set aws_access_key_id {{ assumed_public_ecr_role.sts_creds.access_key }} --profile ansible_user
+          aws configure set aws_secret_access_key {{ assumed_public_ecr_role.sts_creds.secret_key }} --profile ansible_user
+          aws configure set aws_session_token {{ assumed_public_ecr_role.sts_creds.session_token }} --profile ansible_user
 
-      - name: Check caller identity
-        shell:
-          aws sts get-caller-identity
+      - name: who am I
+        shell: |
+          aws sts get-caller-identity --profile ansible_user
+        register: who_am_i_after
+
+      - name: debug
+        debug: var=who_am_i_after
 
   - name: Install the Frontend Helm Chart from public ECR
     hosts: masternode

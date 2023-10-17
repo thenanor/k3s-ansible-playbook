@@ -87,46 +87,12 @@ ansible -i ./hosts -m ping all
 
 - Find the Backend helm umbrella chart version number that you want to use
 
-- Get the **sudo** password of the cluster as some Ansible tasks require it to run:
+- Get the **sudo** password of the cluster as some Ansible tasks require it to run
+
+- We are using an AWS User called 'ansible_user' that has no permissions attached to it (only programmatic access). Get the **vault secret** from team Perseverance to decrypt the user's credentials
 
 - Run the Ansible playbook:
 
 ```shell
-  ansible-playbook -i ./hosts mb_playbook.yaml -e "mb_frontend_version=v1.0.0 mb_backend_version=v1.2.0" --ask-become-pass
-```
-
-## Alternative for the Sudo passowrd to store it in an Ansible Vault:
-
-1. Create a file with Ansible Vault (let's say its called password.yml) which will hold the password:
-
-```shell
-ansible-vault create password.yml
-```
-
-You need to provide a password for this file - this is not the sudo password, this is just an encryption password.  
-Once you provide an encryption password, it will open the file where you can enter any sensitive data, add this line:
-
-```shell
-ansible_become_password: TypeTheSudoPasswordHere
-```
-
-Ansible vault will encrypt this data for you, which will be safe to include it in your source code.
-
-2. Create a file (let's say its called vault.txt) which will hold your encryption password:
-
-```shell
-echo "the_encryption_password_you_used_earlier" > vault.txt
-```
-
-3. Ensure permissions on vault.txt are such that no one else can access it and do not add this file to a source control.
-
-```shell
-chmod 600 vault.txt
-echo "vault.txt" >> .gitignore
-```
-
-4. Run the playbook:
-
-```shell
-ansible-playbook -i ./hosts mb_playbook.yaml -e "mb_frontend_version=v1.0.0 mb_backend_version=v1.2.0" -e '@password.yml' --vault-password-file=vault.txt
+  ansible-playbook -i ./hosts mb_playbook.yaml -e "mb_frontend_version=v1.0.0 mb_backend_version=v1.2.0" -e "@ansible-user.yml" --ask-vault-pass --ask-become-pass
 ```
