@@ -96,3 +96,40 @@ ansible -i ./hosts -m ping all
 ```shell
   ansible-playbook -i ./hosts mb_playbook.yaml -e "mb_frontend_version=v1.0.0 mb_backend_version=v1.2.0" -e "@ansible-user.yml" --ask-vault-pass --ask-become-pass
 ```
+
+- Alternatively, you can store the vault secret (the encryption password) in a file, if you don't want to type it all the time:
+
+```shell
+  echo "the_encryption_password" > vault.txt
+```
+
+Ensure permissions on the vault.txt are such that no one else can access it and do not add this file to a source control.
+
+```shell
+  chmod 600 vault.txt
+  echo "vault.txt" >> .gitignore
+```
+
+and now you can run the playbook like this:
+
+```shell
+  ansible-playbook -i ./hosts mb_playbook.yaml -e "mb_frontend_version=v1.0.0 mb_backend_version=v1.2.0" -e '@ansible-user.yml' --vault-password-file=vault.txt --ask-become-pass
+```
+
+In case you are wondering if you can include the sudo password also in the ansible-user.yml file, the answer is yes:
+
+```shell
+  ansible-vault edit ansible-user.yml
+```
+
+and add the following line:
+
+```shell
+  ansible_become_password: the_sudo_password
+```
+
+now you can run the playbook like this:
+
+```shell
+  ansible-playbook -i ./hosts mb_playbook.yaml -e "mb_frontend_version=v1.0.0 mb_backend_version=v1.2.0" -e '@ansible-user.yml' --vault-password-file=vault.txt
+```

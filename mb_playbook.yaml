@@ -25,6 +25,7 @@
       - name: Waiting for server to come back
         wait_for_connection:
           delay: 5
+        when: "'cgroup_memory=1 cgroup_enable=memory' not in out.stdout"
 
   - name: Master Node Configuration
     hosts: masternode
@@ -159,27 +160,34 @@
     hosts: masternode
     gather_facts: yes
     tasks:
-      - name: Start with clean credentials
-        shell: |
-          rm -rf {{ ansible_env.HOME }}/.aws/*
+      - name: Handle errors
+        block:
+          - name: Start with clean credentials
+            shell: |
+              rm -rf {{ ansible_env.HOME }}/.aws/*
 
-      - name: Configure Anisble User credentials which has no permissions
-        shell: |
-          aws configure set aws_access_key_id {{ ansible_user_access_key }} --profile ansible_user
-          aws configure set aws_secret_access_key {{ ansible_user_secret_key }} --profile ansible_user
+          - name: Configure Anisble User credentials which has no permissions
+            shell: |
+              aws configure set aws_access_key_id {{ ansible_user_access_key }} --profile ansible_user
+              aws configure set aws_secret_access_key {{ ansible_user_secret_key }} --profile ansible_user
 
-      - name: Assume the required AWS role
-        community.aws.sts_assume_role:
-          role_arn: "arn:aws:iam::689943567978:role/ansible_user_public_ecr_read_only"
-          role_session_name: "PublicECR-Session"
-          profile: ansible_user
-        register: assumed_public_ecr_role
+          - name: Assume the required AWS role
+            community.aws.sts_assume_role:
+              role_arn: "arn:aws:iam::689943567978:role/ansible_user_public_ecr_read_only"
+              role_session_name: "PublicECR-Session"
+              profile: ansible_user
+            register: assumed_public_ecr_role
 
-      - name: Update the AWS credentials with the assumed role
-        shell: |
-          aws configure set aws_access_key_id {{ assumed_public_ecr_role.sts_creds.access_key }} --profile ansible_user
-          aws configure set aws_secret_access_key {{ assumed_public_ecr_role.sts_creds.secret_key }} --profile ansible_user
-          aws configure set aws_session_token {{ assumed_public_ecr_role.sts_creds.session_token }} --profile ansible_user
+          - name: Update the AWS credentials with the assumed role
+            shell: |
+              aws configure set aws_access_key_id {{ assumed_public_ecr_role.sts_creds.access_key }} --profile ansible_user
+              aws configure set aws_secret_access_key {{ assumed_public_ecr_role.sts_creds.secret_key }} --profile ansible_user
+              aws configure set aws_session_token {{ assumed_public_ecr_role.sts_creds.session_token }} --profile ansible_user
+        rescue:
+          - name: Remove credentials in case of errors
+            shell: |
+              rm -rf {{ ansible_env.HOME }}/.aws/*
+              rm -rf {{ ansible_env.HOME }}/.config/helm/registry/*
 
   - name: Install the Frontend Helm Chart from public ECR
     hosts: masternode
@@ -191,68 +199,66 @@
       helm_chart_version: "{{ mb_frontend_version }}"
       kubeconfig_path: /etc/rancher/k3s/k3s.yaml
     tasks:
-      - name: Login to Helm registry
-        shell: aws ecr-public get-login-password --profile ansible_user --region us-east-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
+      - name: Frontend
+        block:
+          - name: Login to Helm registry
+            shell: aws ecr-public get-login-password --profile ansible_user --region us-east-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
 
-      - name: Copy FE values to hosts
-        ansible.builtin.copy:
-          src: ./values-fe-public.yaml
-          dest: "{{ ansible_env.HOME }}/values-fe-public.yaml"
-        become: true
-        become_method: sudo
+          - name: Copy FE values to hosts
+            ansible.builtin.copy:
+              src: ./values-fe-public.yaml
+              dest: "{{ ansible_env.HOME }}/values-fe-public.yaml"
+            become: true
+            become_method: sudo
 
-      - name: Install Frontend Helm chart from public ECR using helm commands
-        shell: |
-            helm upgrade fe-public oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }} \
-              --version {{ helm_chart_version }} \
-              --kubeconfig {{ kubeconfig_path }} \
-              --install \
-              --atomic \
-              --timeout=90s \
-              --namespace machine-builder \
-              --create-namespace \
-              -f {{ ansible_env.HOME }}/values-fe-public.yaml \
-              --set image.repository={{ ecr_registry }}/{{ ecr_registry_alias }}/mb-frontend-image \
-              --set image.tag={{ helm_chart_version }} \
-              --registry-config {{ ansible_env.HOME }}/.config/helm/registry/config.json
-        become: true
-        become_method: sudo
-        register: helm_public_release
+          - name: Install Frontend Helm chart from public ECR using helm commands
+            shell: |
+                helm upgrade fe-public oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }} \
+                  --version {{ helm_chart_version }} \
+                  --kubeconfig {{ kubeconfig_path }} \
+                  --install \
+                  --atomic \
+                  --timeout=90s \
+                  --namespace machine-builder \
+                  --create-namespace \
+                  -f {{ ansible_env.HOME }}/values-fe-public.yaml \
+                  --set image.repository={{ ecr_registry }}/{{ ecr_registry_alias }}/mb-frontend-image \
+                  --set image.tag={{ helm_chart_version }} \
+                  --registry-config {{ ansible_env.HOME }}/.config/helm/registry/config.json
+            become: true
+            become_method: sudo
+            register: helm_public_release
 
-      - name: Debug
-        debug: var=helm_public_release
+          - name: Debug
+            debug: var=helm_public_release
 
-      - name: Get History
-        shell: |
-          helm history fe-public \
-              --namespace machine-builder \
-              --kubeconfig {{ kubeconfig_path }} \
-              --registry-config {{ ansible_env.HOME }}/.config/helm/registry/config.json
-        become: true
-        become_method: sudo
-        register: helm_public_release_history
+          - name: Get History
+            shell: |
+              helm history fe-public \
+                  --namespace machine-builder \
+                  --kubeconfig {{ kubeconfig_path }} \
+                  --registry-config {{ ansible_env.HOME }}/.config/helm/registry/config.json
+            become: true
+            become_method: sudo
+            register: helm_public_release_history
 
-      - name: Debug
-        debug: var=helm_public_release_history
+          - name: Debug
+            debug: var=helm_public_release_history
 
-      - name: Gather information about the installed frontend helm chart
-        kubernetes.core.helm_info:
-            release_name: fe-public
-            release_namespace: machine-builder
-            kubeconfig: "{{ kubeconfig_path }}"
-        become: true
-        become_method: sudo
-        register: frontend_gather_info
+          - name: Gather information about the installed frontend helm chart
+            kubernetes.core.helm_info:
+                release_name: fe-public
+                release_namespace: machine-builder
+                kubeconfig: "{{ kubeconfig_path }}"
+            become: true
+            become_method: sudo
+            register: frontend_gather_info
 
-      - name: Debug
-        debug: var=frontend_gather_info
+          - name: Debug
+            debug: var=frontend_gather_info
 
-  - name: Clear AWS configuration
-    hosts: masternode
-    gather_facts: yes
-    tasks:
-      - name: Remove credentials
-        shell: |
-          rm -rf {{ ansible_env.HOME }}/.aws/*
-        tags:
-        - always
+        always:
+          - name: Always remove credentials
+            shell: |
+              rm -rf {{ ansible_env.HOME }}/.aws/*
+              rm -rf {{ ansible_env.HOME }}/.config/helm/registry/*
