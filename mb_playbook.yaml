@@ -245,18 +245,6 @@
           - name: Debug
             debug: var=helm_public_release_history
 
-          - name: Gather information about the installed frontend helm chart
-            kubernetes.core.helm_info:
-                release_name: fe-public
-                release_namespace: machine-builder
-                kubeconfig: "{{ kubeconfig_path }}"
-            become: true
-            become_method: sudo
-            register: frontend_gather_info
-
-          - name: Debug
-            debug: var=frontend_gather_info
-
         always:
           - name: Always remove credentials
             shell: |
