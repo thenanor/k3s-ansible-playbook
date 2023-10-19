@@ -202,7 +202,7 @@
       - name: Frontend
         block:
           - name: Login to Helm registry
-            shell: aws ecr-public get-login-password --profile ansible_user --region us-east-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
+            shell: aws ecr-public get-login-password --profile ansible_user --region us-east-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}/{{ ecr_registry_alias }}
 
           - name: Copy FE values to hosts
             ansible.builtin.copy:
