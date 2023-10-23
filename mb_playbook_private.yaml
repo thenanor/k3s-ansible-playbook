@@ -173,37 +173,39 @@
 
           - name: Assume the required AWS role
             community.aws.sts_assume_role:
-              role_arn: "arn:aws:iam::689943567978:role/ansible_user_public_ecr_read_only"
-              role_session_name: "PublicECR-Session"
+              role_arn: "arn:aws:iam::689943567978:role/ansible_user_ecr_read_only"
+              role_session_name: "PrivateECR-Session"
               profile: ansible_user
-            register: assumed_public_ecr_role
+            register: assumed_private_ecr_role
 
           - name: Update the AWS credentials with the assumed role
             shell: |
-              aws configure set aws_access_key_id {{ assumed_public_ecr_role.sts_creds.access_key }} --profile ansible_user
-              aws configure set aws_secret_access_key {{ assumed_public_ecr_role.sts_creds.secret_key }} --profile ansible_user
-              aws configure set aws_session_token {{ assumed_public_ecr_role.sts_creds.session_token }} --profile ansible_user
+              aws configure set aws_access_key_id {{ assumed_private_ecr_role.sts_creds.access_key }} --profile ansible_user
+              aws configure set aws_secret_access_key {{ assumed_private_ecr_role.sts_creds.secret_key }} --profile ansible_user
+              aws configure set aws_session_token {{ assumed_private_ecr_role.sts_creds.session_token }} --profile ansible_user
         rescue:
           - name: Remove credentials in case of errors
             shell: |
               rm -rf {{ ansible_env.HOME }}/.aws/*
               rm -rf {{ ansible_env.HOME }}/.config/helm/registry/*
 
-  - name: Install the Frontend Helm Chart from public ECR
+  - name: Install the Frontend Helm Chart from private ECR
     hosts: masternode
     gather_facts: yes
     vars:
-      ecr_registry: public.ecr.aws
-      ecr_registry_alias: o4g5e1v3
+      ecr_registry: 689943567978.dkr.ecr.eu-west-1.amazonaws.com
       ecr_helm_repository: mb-frontend-chart
       helm_chart_version: "{{ mb_frontend_version }}"
       kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+      # values_fe_file: values-fe-private.yaml
       values_fe_file: values-fe.yaml
     tasks:
       - name: Frontend
         block:
           - name: Login to Helm registry
-            shell: aws ecr-public get-login-password --profile ansible_user --region us-east-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}/{{ ecr_registry_alias }}
+            shell: aws ecr get-login-password --profile ansible_user --region eu-west-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
+
+          # - name: Do we need to create k3s secret when assuming a role?
 
           - name: Copy FE values to hosts
             ansible.builtin.copy:
@@ -212,9 +214,9 @@
             become: true
             become_method: sudo
 
-          - name: Install Frontend Helm chart from public ECR using helm commands
+          - name: Install Frontend Helm chart from private ECR using helm commands
             shell: |
-                helm upgrade fe-public oci://{{ ecr_registry }}/{{ ecr_registry_alias }}/{{ ecr_helm_repository }} \
+                helm upgrade fe-private oci://{{ ecr_registry }}/{{ ecr_helm_repository }} \
                   --version {{ helm_chart_version }} \
                   --kubeconfig {{ kubeconfig_path }} \
                   --install \
@@ -223,28 +225,28 @@
                   --namespace machine-builder \
                   --create-namespace \
                   -f {{ ansible_env.HOME }}/{{ values_fe_file }} \
-                  --set image.repository={{ ecr_registry }}/{{ ecr_registry_alias }}/mb-frontend-image \
+                  --set image.repository={{ ecr_registry }}/mb-frontend-image \
                   --set image.tag={{ helm_chart_version }} \
                   --registry-config {{ ansible_env.HOME }}/.config/helm/registry/config.json
             become: true
             become_method: sudo
-            register: helm_public_release
+            register: helm_private_release
 
           - name: Debug
-            debug: var=helm_public_release
+            debug: var=helm_private_release
 
           - name: Get History
             shell: |
-              helm history fe-public \
+              helm history fe-private \
                   --namespace machine-builder \
                   --kubeconfig {{ kubeconfig_path }} \
                   --registry-config {{ ansible_env.HOME }}/.config/helm/registry/config.json
             become: true
             become_method: sudo
-            register: helm_public_release_history
+            register: helm_private_release_history
 
           - name: Debug
-            debug: var=helm_public_release_history
+            debug: var=helm_private_release_history
 
         always:
           - name: Always remove credentials
