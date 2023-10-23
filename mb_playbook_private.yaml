@@ -197,15 +197,33 @@
       ecr_helm_repository: mb-frontend-chart
       helm_chart_version: "{{ mb_frontend_version }}"
       kubeconfig_path: /etc/rancher/k3s/k3s.yaml
-      # values_fe_file: values-fe-private.yaml
-      values_fe_file: values-fe.yaml
+      values_fe_file: values-fe-private.yaml
     tasks:
       - name: Frontend
         block:
           - name: Login to Helm registry
             shell: aws ecr get-login-password --profile ansible_user --region eu-west-1 | helm registry login --username AWS --password-stdin {{ ecr_registry }}
 
-          # - name: Do we need to create k3s secret when assuming a role?
+          - name: Delete K3s used secret
+            shell: |
+              kubectl delete secret --ignore-not-found dockersecret --namespace machine-builder
+            become: true
+            become_method: sudo
+
+          - name: Get the AWS password
+            shell: |
+              aws ecr get-login-password --profile ansible_user --region eu-west-1
+            register: aws_pass
+
+          - name: Create k3s secret for the container
+            shell: |
+              kubectl create secret docker-registry dockersecret \
+                --namespace machine-builder \
+                --docker-server=https://{{ ecr_registry }} \
+                --docker-username=AWS \
+                --docker-password="{{ aws_pass.stdout }}"
+            become: true
+            become_method: sudo
 
           - name: Copy FE values to hosts
             ansible.builtin.copy:
